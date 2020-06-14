@@ -1,16 +1,49 @@
 mod decoder;
 mod elf_loader;
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::convert::TryInto;
 
-use decoder::{Instruction, Register};
+use decoder::{AddressedInstruction, Instruction, Register};
+
+fn save_dot_svg_graph(graph_desc: &str, output_path: &str) {
+    use std::process::{Command, Stdio};
+    use std::io::Write;
+
+    let mut process = Command::new("dot")
+        .args(&["-Tsvg", "-o", output_path])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("Failed to run `dot`.");
+
+    {
+        let stdin = process.stdin.as_mut()
+            .expect("Getting `dot` stdin failed.");
+
+        stdin.write_all(graph_desc.as_bytes())
+            .expect("Writing to `dot` stdin failed.");
+    }
+
+    let output = process.wait_with_output()
+        .expect("Waiting for `dot` failed.");
+
+    let no_output = output.stderr.is_empty() && output.stdout.is_empty();
+    if !no_output {
+        println!("{}", String::from_utf8_lossy(&output.stdout));
+        println!("{}", String::from_utf8_lossy(&output.stderr));
+    }
+
+    assert!(output.status.success() && no_output,
+        "`dot` failed to generate graph.");
+}
 
 #[derive(Debug)]
 enum Jump {
     Cond {
         on_true:  u64,
-        on_false: u64
+        on_false: u64,
     },
     Uncond {
         target:     u64,
@@ -21,36 +54,59 @@ enum Jump {
     },
 }
 
-fn parse_jump(pc: u64, inst: &Instruction) -> Option<Jump> {
-    match inst {
-        Instruction::Beq  { imm, .. } |
-        Instruction::Bne  { imm, .. } |
-        Instruction::Blt  { imm, .. } |
-        Instruction::Bge  { imm, .. } |
-        Instruction::Bltu { imm, .. } |
-        Instruction::Bgeu { imm, .. } => {
-            let on_true  = pc.wrapping_add(*imm as u64);
-            let on_false = pc.wrapping_add(4);
+impl Jump {
+    fn from_instruction(pc: u64, inst: &Instruction) -> Option<Jump> {
+        match inst {
+            Instruction::Beq  { imm, .. } |
+            Instruction::Bne  { imm, .. } |
+            Instruction::Blt  { imm, .. } |
+            Instruction::Bge  { imm, .. } |
+            Instruction::Bltu { imm, .. } |
+            Instruction::Bgeu { imm, .. } => {
+                let on_true  = pc.wrapping_add(*imm as u64);
+                let on_false = pc.wrapping_add(4);
 
-            Some(Jump::Cond { on_true, on_false })
+                Some(Jump::Cond { on_true, on_false })
+            }
+            Instruction::Jal { imm, rd } => {
+                let target     = pc.wrapping_add(*imm as u64);
+                let can_return = *rd != Register::Zero;
+
+                Some(Jump::Uncond { target, can_return })
+            }
+            Instruction::Jalr { rd, .. } => {
+                let can_return = *rd != Register::Zero;
+
+                Some(Jump::UncondIndirect { can_return })
+            }
+            _ => None,
         }
-        Instruction::Jal { imm, rd } => {
-            let target     = pc.wrapping_add(*imm as u64);
-            let can_return = *rd != Register::Zero;
-
-            Some(Jump::Uncond { target, can_return })
-        }
-        Instruction::Jalr { rd, .. } => {
-            let can_return = *rd != Register::Zero;
-
-            Some(Jump::UncondIndirect { can_return })
-        },
-        _ => None,
     }
 }
 
+#[derive(Debug, Default)]
+struct Block {
+    start:      u64,
+    end:        u64,
+    entry:      bool,
+    terminated: bool,
+    pred:       Vec<u64>,
+    succ:       Vec<u64>,
+}
+
+enum EdgeType {
+    CondTrue,
+    CondFalse,
+    Uncond,
+}
+
+struct CFG {
+    blocks: BTreeMap<u64, Block>,
+    edges:  BTreeMap<(u64, u64), EdgeType>,
+}
+
 struct Executable {
-    base: u64,
+    base:   u64,
     mapped: Vec<u8>,
 }
 
@@ -63,60 +119,50 @@ impl Executable {
         decoder::decode_instruction(instruction)
     }
 
-    fn disasm_function(&self, start: u64, size: u64) {
+    fn get_function_cfg(&self, start: u64, size: u64) -> CFG {
         let end = start + size;
 
         let within_function = |address: u64| -> bool {
             address >= start && address < end
         };
 
-        #[derive(Debug, Default)]
-        struct Label {
-            start:      u64,
-            end:        u64,
-            entry:      bool,
-            terminated: bool,
-            pred:       Vec<u64>,
-            succ:       Vec<u64>,
+        let mut edges  = BTreeMap::new();
+        let mut blocks = BTreeMap::new();
+
+        let mut current_block = start;
+
+        macro_rules! make_block {
+            ($pc: expr) => {{
+                assert!(within_function($pc));
+                blocks.entry($pc).or_insert(Block { start: $pc, ..Block::default() })
+            }};
         }
 
-        #[derive(Debug)]
-        enum CondJumpType {
-            OnTrue,
-            OnFalse,
+        macro_rules! get_block {
+            () => { blocks.get_mut(&current_block).unwrap() };
+            ($pc: expr) => { blocks.get_mut(&$pc).unwrap() };
         }
 
-        let mut cond_jumps: BTreeMap<(u64, u64), CondJumpType> = BTreeMap::new();
-
-        let mut labels: BTreeMap<u64, Label> = BTreeMap::new();
-
-        let mut current_label = start;
-
-        macro_rules! get_current_label {
-            () => { labels.get_mut(&current_label).unwrap() }
+        macro_rules! make_edge {
+            ($from: expr, $to: expr, $typ: expr) => {
+                assert!(edges.insert(($from, $to), $typ).is_none());
+            };
         }
 
-        macro_rules! get_label {
-            ($pc: expr) => { labels.entry($pc).or_insert(Label::default()) }
-        }
-
-        get_label!(start).entry = true;
+        make_block!(start).entry = true;
 
         for pc in (start..end).step_by(4) {
-            let jump = parse_jump(pc, &self.get_instruction(pc));
+            let jump = Jump::from_instruction(pc, &self.get_instruction(pc));
 
             if let Some(jump) = jump {
                 match jump {
                     Jump::Cond { on_true, on_false } => {
-                        assert!(within_function(on_true));
-                        get_label!(on_true);
-
-                        assert!(within_function(on_false));
-                        get_label!(on_false);
+                        make_block!(on_true);
+                        make_block!(on_false);
                     }
                     Jump::Uncond { target, .. } => {
                         if within_function(target) {
-                            get_label!(target);
+                            make_block!(target);
                         }
                     }
                     _ => (),
@@ -125,122 +171,105 @@ impl Executable {
         }
 
         for pc in (start..end).step_by(4) {
-            let jump = parse_jump(pc, &self.get_instruction(pc));
+            let jump = Jump::from_instruction(pc, &self.get_instruction(pc));
 
-            match labels.get(&pc) {
+            match blocks.get(&pc) {
                 Some(_) => {
-                    get_current_label!().end = pc;
-                    current_label = pc;
+                    get_block!().end = pc;
+                    current_block = pc;
                 },
-                None => assert!(!get_current_label!().terminated),
+                None => assert!(!get_block!().terminated),
             }
 
             if let Some(jump) = jump {
                 match jump {
                     Jump::Cond { on_true, on_false } => {
-                        let current = get_current_label!();
+                        let current = get_block!();
 
                         current.succ.extend_from_slice(&[on_true, on_false]);
                         current.terminated = true;
 
-                        get_label!(on_true).pred.push(current_label);
-                        get_label!(on_false).pred.push(current_label);
+                        get_block!(on_true).pred.push(current_block);
+                        get_block!(on_false).pred.push(current_block);
 
-                        assert!(cond_jumps.insert((current_label, on_true),
-                            CondJumpType::OnTrue).is_none());
-
-                        assert!(cond_jumps.insert((current_label, on_false),
-                            CondJumpType::OnFalse).is_none());
-                    }
-                    Jump::UncondIndirect { can_return } => {
-                        if !can_return {
-                            get_current_label!().terminated = true;
-                        }
+                        make_edge!(current_block, on_true, EdgeType::CondTrue);
+                        make_edge!(current_block, on_false, EdgeType::CondFalse);
                     }
                     Jump::Uncond { target, can_return } => {
                         if within_function(target) {
-                            let current = get_current_label!();
+                            let current = get_block!();
 
                             current.succ.push(target);
                             current.terminated = true;
 
-                            get_label!(target).pred.push(current_label);
+                            get_block!(target).pred.push(current_block);
+
+                            make_edge!(current_block, target, EdgeType::Uncond);
                         } else if !can_return {
-                            get_current_label!().terminated = true;
+                            get_block!().terminated = true;
+                        }
+                    }
+                    Jump::UncondIndirect { can_return } => {
+                        if !can_return {
+                            get_block!().terminated = true;
                         }
                     }
                 }
             }
         }
 
-        println!("{:X?}", cond_jumps);
+        get_block!().end = end;
 
-        get_current_label!().end = start + size;
+        CFG {
+            blocks,
+            edges,
+        }
+    }
 
-        for (start, label) in labels.iter_mut() {
-            assert!(label.terminated);
+    fn draw_function_cfg(&self, start: u64, size: u64, output_path: &str) {
+        let cfg = self.get_function_cfg(start, size);
 
-            label.start = *start;
+        let mut dotgraph = String::new();
+
+        dotgraph.push_str("digraph CFG {\n");
+
+        for ((from, to), edge_type) in cfg.edges.iter() {
+            let color = match edge_type {
+                EdgeType::CondTrue  => "green",
+                EdgeType::CondFalse => "red",
+                EdgeType::Uncond    => "blue",
+            };
+
+            dotgraph.push_str(&format!("{} -> {} [color={}];\n", from, to, color));
         }
 
-        let mut connections = BTreeSet::new();
+        for (_, block) in cfg.blocks.iter() {
+            dotgraph.push_str(&format!(
+                r#"{} [margin=0.2 shape=box fontname="Consolas" label=""#, block.start));
 
-        for (start, label) in labels.iter() {
-            for pred in label.pred.iter() {
-                connections.insert((pred, start));
-            }
-
-            for succ in label.succ.iter() {
-                connections.insert((start, succ));
-            }
-        }
-
-        println!("{:X?}", connections);
-
-
-        println!("digraph G {{");
-
-        for (a, b) in connections.iter() {
-            print!("\"{:X}\" -> \"{:X}\"", a, b);
-
-            if let Some(cj_type) = cond_jumps.get(&(**a, **b)) {
-                let color = match cj_type {
-                    CondJumpType::OnTrue  => "green",
-                    CondJumpType::OnFalse => "red",
-                };
-
-                print!("[color={}]", color);
-            }
-
-            println!();
-        }
-
-        for (start, label) in labels.iter() {
-            print!("\"{:X}\" [margin=0.2 shape=box fontname=\"Consolas\" label=\"", start);
-
-            for pc in ((*start)..(label.end)).step_by(4) {
-                let instruction = decoder::AddressedInstruction {
+            for pc in (block.start..block.end).step_by(4) {
+                let instruction = AddressedInstruction {
                     inst: self.get_instruction(pc),
                     pc,
                 };
 
-                print!("0x{:X}  {}\\l", pc, instruction);
+                dotgraph.push_str(&format!(r"0x{:X}  {}\l", pc, instruction));
             }
 
-            println!("\"];");
+            dotgraph.push_str("\"];\n");
         }
 
-        println!("}}");
+        dotgraph.push_str("}\n");
+
+        save_dot_svg_graph(&dotgraph, output_path);
     }
 }
 
 fn main() {
-    let mut file = std::fs::read("F://rv64/main").unwrap();
-    let (base, entrypoint, mapped) = elf_loader::map_elf64(&mut file);
+    let file = std::fs::read("F://rv64/main").unwrap();
+    let (base, entrypoint, mapped) = elf_loader::map_elf64(&file);
 
-    let executable = Executable {
-        base, mapped
-    };
+    let executable = Executable { base, mapped };
 
-    executable.disasm_function(entrypoint, 0xB4);
+    executable.draw_function_cfg(entrypoint, 0xB4, "cfg.svg");
 }

@@ -1,3 +1,5 @@
+use std::fmt;
+
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Register {
     Zero,
@@ -34,7 +36,45 @@ pub enum Register {
     T6,
 }
 
-use std::fmt;
+impl Register {
+    fn from_number(number: u32) -> Option<Register> {
+        match number {
+            0  => Some(Register::Zero),
+            1  => Some(Register::Ra),
+            2  => Some(Register::Sp),
+            3  => Some(Register::Gp),
+            4  => Some(Register::Tp),
+            5  => Some(Register::T0),
+            6  => Some(Register::T1),
+            7  => Some(Register::T2),
+            8  => Some(Register::S0),
+            9  => Some(Register::S1),
+            10 => Some(Register::A0),
+            11 => Some(Register::A1),
+            12 => Some(Register::A2),
+            13 => Some(Register::A3),
+            14 => Some(Register::A4),
+            15 => Some(Register::A5),
+            16 => Some(Register::A6),
+            17 => Some(Register::A7),
+            18 => Some(Register::S2),
+            19 => Some(Register::S3),
+            20 => Some(Register::S4),
+            21 => Some(Register::S5),
+            22 => Some(Register::S6),
+            23 => Some(Register::S7),
+            24 => Some(Register::S8),
+            25 => Some(Register::S9),
+            26 => Some(Register::S10),
+            27 => Some(Register::S11),
+            28 => Some(Register::T3),
+            29 => Some(Register::T4),
+            30 => Some(Register::T5),
+            31 => Some(Register::T6),
+            _  => None,
+        }
+    }
+}
 
 impl fmt::Display for Register {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -75,407 +115,6 @@ impl fmt::Display for Register {
 
         write!(f, "{}", register_name)
     }
-}
-
-fn display_pseudoinstruction(inst: &Instruction, f: &mut fmt::Formatter<'_>, handled: &mut bool)
-    -> fmt::Result
-{
-    use Instruction::*;
-
-    *handled = true;
-
-    match inst {
-        Addi { rd: Register::Zero, rs1: Register::Zero, imm: 0 } => {
-            write!(f, "nop")?;
-        },
-        Addi { rd, rs1: Register::Zero, imm } => {
-            write!(f, "mv {}, {}", rd, imm)?;
-        },
-        Addi { rd, rs1, imm: 0 } => {
-            write!(f, "mv {}, {}", rd, rs1)?;
-        },
-        Jal { rd: Register::Zero, imm } => {
-            write!(f, "j {}", imm)?;
-        }
-        Jal { rd: Register::Ra, imm } => {
-            write!(f, "jal {}", imm)?;
-        }
-        Jalr { rd: Register::Zero, rs1: Register::Ra, imm: 0 } => {
-            write!(f, "ret")?;
-        }
-        Jalr { rd: Register::Ra, rs1, imm: 0 } => {
-            write!(f, "jalr {}", rs1)?;
-        }
-        Jalr { rd: Register::Zero, rs1, imm: 0 } => {
-            write!(f, "jr {}", rs1)?;
-        }
-        _ => *handled = false,
-    }
-
-    Ok(())
-}
-
-impl fmt::Display for Instruction {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        use Instruction::*;
-
-        let mut handled = false;
-        display_pseudoinstruction(self, f, &mut handled)?;
-
-        if handled {
-            return Ok(());
-        }
-
-        match self {
-            Lui   { imm, rd } |
-            Auipc { imm, rd } |
-            Jal   { imm, rd } => {
-                let instruction_name = match self {
-                    Lui   { .. } => "mv",
-                    Auipc { .. } => "auipc",
-                    Jal   { .. } => "jal",
-                    _            => unreachable!(),
-                };
-
-                write!(f, "{} {}, {}", instruction_name, rd, imm)?;
-            },
-            Jalr { imm, rs1, rd } => {
-                write!(f, "jalr {}, {}, {}", rd, rs1, imm)?;
-            }
-            Beq  { imm, rs1, rs2 } |
-            Bne  { imm, rs1, rs2 } |
-            Blt  { imm, rs1, rs2 } |
-            Bge  { imm, rs1, rs2 } |
-            Bltu { imm, rs1, rs2 } |
-            Bgeu { imm, rs1, rs2 } => {
-                let instruction_name = match self {
-                    Beq  { .. } => "beq",
-                    Bne  { .. } => "bne",
-                    Blt  { .. } => "blt",
-                    Bge  { .. } => "bge",
-                    Bltu { .. } => "bltu",
-                    Bgeu { .. } => "bgeu",
-                    _           => unreachable!(),
-                };
-
-                write!(f, "{} {}, {}, {}", instruction_name, rs1, rs2, imm)?;
-            }
-            Lb  { imm, rs1, rd } |
-            Lh  { imm, rs1, rd } |
-            Lw  { imm, rs1, rd } |
-            Ld  { imm, rs1, rd } |
-            Lbu { imm, rs1, rd } |
-            Lhu { imm, rs1, rd } |
-            Lwu { imm, rs1, rd } => {
-                let instruction_name = match self {
-                    Lb  { .. } => "lb",
-                    Lh  { .. } => "lh",
-                    Lw  { .. } => "lw",
-                    Ld  { .. } => "ld",
-                    Lbu { .. } => "lbu",
-                    Lhu { .. } => "lhu",
-                    Lwu { .. } => "lwu",
-                    _          => unreachable!(),
-                };
-
-                write!(f, "{} {}, ", instruction_name, rd)?;
-
-                if *rs1 == Register::Zero {
-                    write!(f, "({})", imm)?;
-                } else {
-                    match *imm {
-                        0          => write!(f, "({})", rs1)?,
-                        x if x > 0 => write!(f, "({}+{})", rs1, x)?,
-                        x if x < 0 => write!(f, "({}-{})", rs1, -x)?,
-                        _          => unreachable!(),
-                    }
-                }
-            }
-            Sb { imm, rs1, rs2 } |
-            Sh { imm, rs1, rs2 } |
-            Sw { imm, rs1, rs2 } |
-            Sd { imm, rs1, rs2 } => {
-                let instruction_name = match self {
-                    Sb { .. } => "sb",
-                    Sh { .. } => "sh",
-                    Sw { .. } => "sw",
-                    Sd { .. } => "sd",
-                    _         => unreachable!(),
-                };
-
-                write!(f, "{} ", instruction_name)?;
-
-                if *rs1 == Register::Zero {
-                    write!(f, "({})", *imm)?;
-                } else {
-                    match *imm {
-                        0          => write!(f, "({})", rs1)?,
-                        x if x > 0 => write!(f, "({}+{})", rs1, x)?,
-                        x if x < 0 => write!(f, "({}-{})", rs1, -x)?,
-                        _          => unreachable!(),
-                    }
-                }
-
-                write!(f, ", {}", rs2)?;
-            }
-            Addi  { imm, rs1, rd } |
-            Xori  { imm, rs1, rd } |
-            Ori   { imm, rs1, rd } |
-            Andi  { imm, rs1, rd } |
-            Addiw { imm, rs1, rd } => {
-                let instruction_name = match self {
-                    Addi  { .. } => "addi",
-                    Xori  { .. } => "xori",
-                    Ori   { .. } => "ori",
-                    Andi  { .. } => "andi",
-                    Addiw { .. } => "addiw",
-                    _            => unreachable!(),
-                };
-
-                write!(f, "{} {}, {}, {}", instruction_name, rd, rs1, imm)?;
-            }
-            Slli  { shamt, rs1, rd } |
-            Srli  { shamt, rs1, rd } |
-            Srai  { shamt, rs1, rd } |
-            Slliw { shamt, rs1, rd } |
-            Srliw { shamt, rs1, rd } |
-            Sraiw { shamt, rs1, rd } => {
-                let instruction_name = match self {
-                    Slli  { .. } => "slli",
-                    Srli  { .. } => "srli",
-                    Srai  { .. } => "srai",
-                    Slliw { .. } => "slliw",
-                    Srliw { .. } => "srliw",
-                    Sraiw { .. } => "sraiw",
-                    _            => unreachable!(),
-                };
-
-                write!(f, "{} {}, {}, {}", instruction_name, rd, rs1, shamt)?;
-            }
-            Add  { rs1, rs2, rd } | 
-            Sub  { rs1, rs2, rd } | 
-            Sll  { rs1, rs2, rd } | 
-            Slt  { rs1, rs2, rd } | 
-            Sltu { rs1, rs2, rd } | 
-            Xor  { rs1, rs2, rd } | 
-            Srl  { rs1, rs2, rd } | 
-            Sra  { rs1, rs2, rd } | 
-            Or   { rs1, rs2, rd } | 
-            And  { rs1, rs2, rd } | 
-            Addw { rs1, rs2, rd } | 
-            Subw { rs1, rs2, rd } | 
-            Sllw { rs1, rs2, rd } | 
-            Srlw { rs1, rs2, rd } | 
-            Sraw { rs1, rs2, rd } => {
-                let instruction_name = match self {
-                    Add  { .. } => "add", 
-                    Sub  { .. } => "sub", 
-                    Sll  { .. } => "sll", 
-                    Slt  { .. } => "slt", 
-                    Sltu { .. } => "sltu", 
-                    Xor  { .. } => "xor", 
-                    Srl  { .. } => "srl", 
-                    Sra  { .. } => "sra", 
-                    Or   { .. } => "or", 
-                    And  { .. } => "and", 
-                    Addw { .. } => "addw", 
-                    Subw { .. } => "subw", 
-                    Sllw { .. } => "sllw", 
-                    Srlw { .. } => "srlw", 
-                    Sraw { .. } => "sraw", 
-                    _           => unreachable!(),
-                };
-
-                write!(f, "{} {}, {}, {}", instruction_name, rd, rs1, rs2)?;
-            }
-            Ecall     => write!(f, "ecall")?,
-            Ebreak    => write!(f, "ebreak")?,
-            Undefined => write!(f, "ud")?,
-            _         => panic!("Unknown instruction {:?}.", self),
-        }
-
-        Ok(())
-    }
-}
-
-impl Register {
-    fn from_number(number: u32) -> Option<Register> {
-        match number {
-            0 => Some(Register::Zero),
-            1 => Some(Register::Ra),
-            2 => Some(Register::Sp),
-            3 => Some(Register::Gp),
-            4 => Some(Register::Tp),
-            5 => Some(Register::T0),
-            6 => Some(Register::T1),
-            7 => Some(Register::T2),
-            8 => Some(Register::S0),
-            9 => Some(Register::S1),
-            10 => Some(Register::A0),
-            11 => Some(Register::A1),
-            12 => Some(Register::A2),
-            13 => Some(Register::A3),
-            14 => Some(Register::A4),
-            15 => Some(Register::A5),
-            16 => Some(Register::A6),
-            17 => Some(Register::A7),
-            18 => Some(Register::S2),
-            19 => Some(Register::S3),
-            20 => Some(Register::S4),
-            21 => Some(Register::S5),
-            22 => Some(Register::S6),
-            23 => Some(Register::S7),
-            24 => Some(Register::S8),
-            25 => Some(Register::S9),
-            26 => Some(Register::S10),
-            27 => Some(Register::S11),
-            28 => Some(Register::T3),
-            29 => Some(Register::T4),
-            30 => Some(Register::T5),
-            31 => Some(Register::T6),
-            _ => None,
-        }
-    }
-}
-
-const INSTRUCTION_TYPES: [Option<InstructionType>; 128] = [
-    None,                     // _0000000
-    None,                     // _0000001
-    None,                     // _0000010
-    Some(InstructionType::I), // _0000011
-    None,                     // _0000100
-    None,                     // _0000101
-    None,                     // _0000110
-    None,                     // _0000111
-    None,                     // _0001000
-    None,                     // _0001001
-    None,                     // _0001010
-    None,                     // _0001011
-    None,                     // _0001100
-    None,                     // _0001101
-    None,                     // _0001110
-    Some(InstructionType::I), // _0001111
-    None,                     // _0010000
-    None,                     // _0010001
-    None,                     // _0010010
-    Some(InstructionType::I), // _0010011
-    None,                     // _0010100
-    None,                     // _0010101
-    None,                     // _0010110
-    Some(InstructionType::U), // _0010111
-    None,                     // _0011000
-    None,                     // _0011001
-    None,                     // _0011010
-    Some(InstructionType::I), // _0011011
-    None,                     // _0011100
-    None,                     // _0011101
-    None,                     // _0011110
-    None,                     // _0011111
-    None,                     // _0100000
-    None,                     // _0100001
-    None,                     // _0100010
-    Some(InstructionType::S), // _0100011
-    None,                     // _0100100
-    None,                     // _0100101
-    None,                     // _0100110
-    None,                     // _0100111
-    None,                     // _0101000
-    None,                     // _0101001
-    None,                     // _0101010
-    None,                     // _0101011
-    None,                     // _0101100
-    None,                     // _0101101
-    None,                     // _0101110
-    None,                     // _0101111
-    None,                     // _0110000
-    None,                     // _0110001
-    None,                     // _0110010
-    Some(InstructionType::R), // _0110011
-    None,                     // _0110100
-    None,                     // _0110101
-    None,                     // _0110110
-    Some(InstructionType::U), // _0110111
-    None,                     // _0111000
-    None,                     // _0111001
-    None,                     // _0111010
-    Some(InstructionType::R), // _0111011
-    None,                     // _0111100
-    None,                     // _0111101
-    None,                     // _0111110
-    None,                     // _0111111
-    None,                     // _1000000
-    None,                     // _1000001
-    None,                     // _1000010
-    None,                     // _1000011
-    None,                     // _1000100
-    None,                     // _1000101
-    None,                     // _1000110
-    None,                     // _1000111
-    None,                     // _1001000
-    None,                     // _1001001
-    None,                     // _1001010
-    None,                     // _1001011
-    None,                     // _1001100
-    None,                     // _1001101
-    None,                     // _1001110
-    None,                     // _1001111
-    None,                     // _1010000
-    None,                     // _1010001
-    None,                     // _1010010
-    None,                     // _1010011
-    None,                     // _1010100
-    None,                     // _1010101
-    None,                     // _1010110
-    None,                     // _1010111
-    None,                     // _1011000
-    None,                     // _1011001
-    None,                     // _1011010
-    None,                     // _1011011
-    None,                     // _1011100
-    None,                     // _1011101
-    None,                     // _1011110
-    None,                     // _1011111
-    None,                     // _1100000
-    None,                     // _1100001
-    None,                     // _1100010
-    Some(InstructionType::B), // _1100011
-    None,                     // _1100100
-    None,                     // _1100101
-    None,                     // _1100110
-    Some(InstructionType::I), // _1100111
-    None,                     // _1101000
-    None,                     // _1101001
-    None,                     // _1101010
-    None,                     // _1101011
-    None,                     // _1101100
-    None,                     // _1101101
-    None,                     // _1101110
-    Some(InstructionType::J), // _1101111
-    None,                     // _1110000
-    None,                     // _1110001
-    None,                     // _1110010
-    Some(InstructionType::I), // _1110011
-    None,                     // _1110100
-    None,                     // _1110101
-    None,                     // _1110110
-    None,                     // _1110111
-    None,                     // _1111000
-    None,                     // _1111001
-    None,                     // _1111010
-    None,                     // _1111011
-    None,                     // _1111100
-    None,                     // _1111101
-    None,                     // _1111110
-    None,                     // _1111111
-];
-
-enum InstructionType {
-    R,
-    I,
-    S,
-    B,
-    U,
-    J,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -853,45 +492,42 @@ pub struct AddressedInstruction {
     pub pc:   u64,
 }
 
-fn display_pseudoinstruction1(
-    inst: &AddressedInstruction,
-    f: &mut fmt::Formatter<'_>,
-    handled: &mut bool,
-) -> fmt::Result
-{
-    use Instruction::*;
+impl AddressedInstruction {
+    fn display_pseudo(&self, f: &mut fmt::Formatter<'_>, handled: &mut bool) -> fmt::Result {
+        use Instruction::*;
 
-    *handled = true;
+        *handled = true;
 
-    match inst.inst {
-        Addi { rd: Register::Zero, rs1: Register::Zero, imm: 0 } => {
-            write!(f, "nop")?;
-        },
-        Addi { rd, rs1: Register::Zero, imm } => {
-            write!(f, "mv {}, {}", rd, imm)?;
-        },
-        Addi { rd, rs1, imm: 0 } => {
-            write!(f, "mv {}, {}", rd, rs1)?;
-        },
-        Jal { rd: Register::Zero, imm } => {
-            write!(f, "j 0x{:X}", inst.pc.wrapping_add(imm as u64))?;
+        match self.inst {
+            Addi { rd: Register::Zero, rs1: Register::Zero, imm: 0 } => {
+                write!(f, "nop")?;
+            },
+            Addi { rd, rs1: Register::Zero, imm } => {
+                write!(f, "mv {}, {}", rd, imm)?;
+            },
+            Addi { rd, rs1, imm: 0 } => {
+                write!(f, "mv {}, {}", rd, rs1)?;
+            },
+            Jal { rd: Register::Zero, imm } => {
+                write!(f, "j 0x{:X}", self.pc.wrapping_add(imm as u64))?;
+            }
+            Jal { rd: Register::Ra, imm } => {
+                write!(f, "jal 0x{:X}", self.pc.wrapping_add(imm as u64))?;
+            }
+            Jalr { rd: Register::Zero, rs1: Register::Ra, imm: 0 } => {
+                write!(f, "ret")?;
+            }
+            Jalr { rd: Register::Ra, rs1, imm: 0 } => {
+                write!(f, "jalr {}", rs1)?;
+            }
+            Jalr { rd: Register::Zero, rs1, imm: 0 } => {
+                write!(f, "jr {}", rs1)?;
+            }
+            _ => *handled = false,
         }
-        Jal { rd: Register::Ra, imm } => {
-            write!(f, "jal 0x{:X}", inst.pc.wrapping_add(imm as u64))?;
-        }
-        Jalr { rd: Register::Zero, rs1: Register::Ra, imm: 0 } => {
-            write!(f, "ret")?;
-        }
-        Jalr { rd: Register::Ra, rs1, imm: 0 } => {
-            write!(f, "jalr {}", rs1)?;
-        }
-        Jalr { rd: Register::Zero, rs1, imm: 0 } => {
-            write!(f, "jr {}", rs1)?;
-        }
-        _ => *handled = false,
+
+        Ok(())
     }
-
-    Ok(())
 }
 
 impl fmt::Display for AddressedInstruction {
@@ -899,7 +535,7 @@ impl fmt::Display for AddressedInstruction {
         use Instruction::*;
 
         let mut handled = false;
-        display_pseudoinstruction1(self, f, &mut handled)?;
+        self.display_pseudo(f, &mut handled)?;
 
         if handled {
             return Ok(());
@@ -1079,3 +715,143 @@ impl fmt::Display for AddressedInstruction {
         Ok(())
     }
 }
+
+enum InstructionType {
+    R,
+    I,
+    S,
+    B,
+    U,
+    J,
+}
+
+const INSTRUCTION_TYPES: [Option<InstructionType>; 128] = [
+    None,                     // _0000000
+    None,                     // _0000001
+    None,                     // _0000010
+    Some(InstructionType::I), // _0000011
+    None,                     // _0000100
+    None,                     // _0000101
+    None,                     // _0000110
+    None,                     // _0000111
+    None,                     // _0001000
+    None,                     // _0001001
+    None,                     // _0001010
+    None,                     // _0001011
+    None,                     // _0001100
+    None,                     // _0001101
+    None,                     // _0001110
+    Some(InstructionType::I), // _0001111
+    None,                     // _0010000
+    None,                     // _0010001
+    None,                     // _0010010
+    Some(InstructionType::I), // _0010011
+    None,                     // _0010100
+    None,                     // _0010101
+    None,                     // _0010110
+    Some(InstructionType::U), // _0010111
+    None,                     // _0011000
+    None,                     // _0011001
+    None,                     // _0011010
+    Some(InstructionType::I), // _0011011
+    None,                     // _0011100
+    None,                     // _0011101
+    None,                     // _0011110
+    None,                     // _0011111
+    None,                     // _0100000
+    None,                     // _0100001
+    None,                     // _0100010
+    Some(InstructionType::S), // _0100011
+    None,                     // _0100100
+    None,                     // _0100101
+    None,                     // _0100110
+    None,                     // _0100111
+    None,                     // _0101000
+    None,                     // _0101001
+    None,                     // _0101010
+    None,                     // _0101011
+    None,                     // _0101100
+    None,                     // _0101101
+    None,                     // _0101110
+    None,                     // _0101111
+    None,                     // _0110000
+    None,                     // _0110001
+    None,                     // _0110010
+    Some(InstructionType::R), // _0110011
+    None,                     // _0110100
+    None,                     // _0110101
+    None,                     // _0110110
+    Some(InstructionType::U), // _0110111
+    None,                     // _0111000
+    None,                     // _0111001
+    None,                     // _0111010
+    Some(InstructionType::R), // _0111011
+    None,                     // _0111100
+    None,                     // _0111101
+    None,                     // _0111110
+    None,                     // _0111111
+    None,                     // _1000000
+    None,                     // _1000001
+    None,                     // _1000010
+    None,                     // _1000011
+    None,                     // _1000100
+    None,                     // _1000101
+    None,                     // _1000110
+    None,                     // _1000111
+    None,                     // _1001000
+    None,                     // _1001001
+    None,                     // _1001010
+    None,                     // _1001011
+    None,                     // _1001100
+    None,                     // _1001101
+    None,                     // _1001110
+    None,                     // _1001111
+    None,                     // _1010000
+    None,                     // _1010001
+    None,                     // _1010010
+    None,                     // _1010011
+    None,                     // _1010100
+    None,                     // _1010101
+    None,                     // _1010110
+    None,                     // _1010111
+    None,                     // _1011000
+    None,                     // _1011001
+    None,                     // _1011010
+    None,                     // _1011011
+    None,                     // _1011100
+    None,                     // _1011101
+    None,                     // _1011110
+    None,                     // _1011111
+    None,                     // _1100000
+    None,                     // _1100001
+    None,                     // _1100010
+    Some(InstructionType::B), // _1100011
+    None,                     // _1100100
+    None,                     // _1100101
+    None,                     // _1100110
+    Some(InstructionType::I), // _1100111
+    None,                     // _1101000
+    None,                     // _1101001
+    None,                     // _1101010
+    None,                     // _1101011
+    None,                     // _1101100
+    None,                     // _1101101
+    None,                     // _1101110
+    Some(InstructionType::J), // _1101111
+    None,                     // _1110000
+    None,                     // _1110001
+    None,                     // _1110010
+    Some(InstructionType::I), // _1110011
+    None,                     // _1110100
+    None,                     // _1110101
+    None,                     // _1110110
+    None,                     // _1110111
+    None,                     // _1111000
+    None,                     // _1111001
+    None,                     // _1111010
+    None,                     // _1111011
+    None,                     // _1111100
+    None,                     // _1111101
+    None,                     // _1111110
+    None,                     // _1111111
+];
