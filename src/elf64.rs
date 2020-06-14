@@ -99,7 +99,7 @@ impl Elf {
             section_name_offsets.push(name_offset);
 
             sections.push(Section {
-                name: String::from(""),
+                name: String::new(),
                 sec_type,
                 flags,
                 virt_addr,
