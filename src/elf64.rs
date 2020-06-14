@@ -1,20 +1,38 @@
 const PT_LOAD: u32 = 1;
 
+trait BinaryReadable {
+    fn read(buffer: &[u8], offset: usize) -> Self;
+}
+
+macro_rules! impl_binary_readable {
+    ($readable_type: ty) => {
+        impl BinaryReadable for $readable_type {
+            fn read(buffer: &[u8], offset: usize) -> Self {
+                use std::convert::TryInto;
+
+                let end = offset + std::mem::size_of::<Self>();
+
+                Self::from_le_bytes(buffer[offset..end].try_into().unwrap())
+            }
+        }
+    };
+    ($($readable_type: ty),*) => {
+        $( impl_binary_readable! { $readable_type } )*
+    };
+}
+
 trait BinaryRead {
-    fn read<T: Copy>(&self, offset: u64) -> T;
+    fn read<T: BinaryReadable>(&self, offset: usize) -> T;
 }
 
 impl BinaryRead for [u8] {
-    fn read<T: Copy>(&self, offset: u64) -> T {
-        assert!(offset as usize + std::mem::size_of::<T>() <= self.len(),
-            "Tried to read out of bounds memory.");
-
-        unsafe {
-            let ptr = self.as_ptr().offset(offset as isize) as *const T;
-            ptr.read_unaligned()
-        }
+    fn read<T: BinaryReadable>(&self, offset: usize) -> T {
+        BinaryReadable::read(self, offset)
     }
 }
+
+impl_binary_readable! { u8, u16, u32, u64 }
+impl_binary_readable! { i8, i16, i32, i64 }
 
 #[derive(Clone, Debug)]
 pub struct Section {
@@ -65,7 +83,7 @@ impl Elf {
         let mut segments = Vec::with_capacity(segment_count as usize);
 
         for i in 0..segment_count {
-            let segment = segment_table + i as u64 * segment_header_size as u64;
+            let segment = (segment_table + i as u64 * segment_header_size as u64) as usize;
 
             let seg_type: u32 = buffer.read(segment);
             let flags:    u32 = buffer.read(segment + 0x04);
@@ -86,7 +104,7 @@ impl Elf {
         }
 
         for i in 0..section_count {
-            let section = section_table + i as u64 * section_header_size as u64;
+            let section = (section_table + i as u64 * section_header_size as u64) as usize;
 
             let name_offset: u32 = buffer.read(section);
             let sec_type:    u32 = buffer.read(section + 0x04);
