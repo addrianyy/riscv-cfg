@@ -118,7 +118,6 @@ impl Elf {
             section.name = String::from_utf8_lossy(&name).to_string();
         }
 
-
         let base_address = segments.iter()
             .filter(|seg| seg.seg_type == PT_LOAD)
             .min_by_key(|seg| seg.virt_addr)
@@ -140,6 +139,10 @@ impl Elf {
     pub fn map(&self, buffer: &[u8]) -> Vec<u8> {
         let mut mapped = Vec::with_capacity(buffer.len());
 
+        macro_rules! pad {
+            ($amount: expr) => { mapped.extend(vec![0u8; $amount]); }
+        }
+
         for segment in self.segments.iter() {
             if segment.seg_type != PT_LOAD {
                 continue;
@@ -147,20 +150,17 @@ impl Elf {
 
             let virt_offset = (segment.virt_addr - self.base_address) as usize;
 
-            let pad = virt_offset.checked_sub(mapped.len()).unwrap();
-            mapped.extend(vec![0u8; pad]);
+            pad!(virt_offset.checked_sub(mapped.len()).unwrap());
 
             let size  = std::cmp::min(segment.file_size, segment.virt_size as usize);
             let start = segment.file_offset;
             let end   = start + size;
             mapped.extend_from_slice(&buffer[start..end]);
 
-            let pad = segment.virt_size as usize - size;
-            mapped.extend(vec![0u8; pad]);
+            pad!(segment.virt_size as usize - size);
         }
 
-        let pad = ((mapped.len() + 4095) & !4095) - mapped.len();
-        mapped.extend(vec![0u8; pad]);
+        pad!(((mapped.len() + 4095) & !4095) - mapped.len());
 
         mapped
     }
