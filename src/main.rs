@@ -1,6 +1,5 @@
 mod rv64;
 mod displayinst;
-mod elf_loader;
 mod dot;
 mod htmlfmt;
 mod cfg;
@@ -89,10 +88,10 @@ fn main() {
         .expect("Failed to find entrypoint in function list.")
         .clone();
 
-    let (base, entrypoint, mapped) = elf_loader::map_elf64(&file);
+    let mapped = elf.map(&file);
 
     let executable = Executable { 
-        base,
+        base: elf.base_address,
         mapped,
         funcs,
     };

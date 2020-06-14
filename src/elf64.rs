@@ -1,3 +1,5 @@
+const PT_LOAD: u32 = 1;
+
 trait BinaryRead {
     fn read<T: Copy>(&self, offset: u64) -> T;
 }
@@ -65,7 +67,7 @@ impl Elf {
         for i in 0..segment_count {
             let segment = segment_table + i as u64 * segment_header_size as u64;
 
-            let seg_type: u32 = buffer.read(segment + 0x00);
+            let seg_type: u32 = buffer.read(segment);
             let flags:    u32 = buffer.read(segment + 0x04);
 
             let file_offset: u64 = buffer.read(segment + 0x08);
@@ -86,7 +88,7 @@ impl Elf {
         for i in 0..section_count {
             let section = section_table + i as u64 * section_header_size as u64;
 
-            let name_offset: u32 = buffer.read(section + 0x00);
+            let name_offset: u32 = buffer.read(section);
             let sec_type:    u32 = buffer.read(section + 0x04);
             let flags:       u64 = buffer.read(section + 0x08);
 
@@ -116,7 +118,6 @@ impl Elf {
             section.name = String::from_utf8_lossy(&name).to_string();
         }
 
-        const PT_LOAD: u32 = 1;
 
         let base_address = segments.iter()
             .filter(|seg| seg.seg_type == PT_LOAD)
@@ -134,6 +135,34 @@ impl Elf {
 
     pub fn section_by_name(&self, name: &str) -> Option<&Section> {
         self.sections.iter().find(|sec| sec.name == name)
+    }
+
+    pub fn map(&self, buffer: &[u8]) -> Vec<u8> {
+        let mut mapped = Vec::with_capacity(buffer.len());
+
+        for segment in self.segments.iter() {
+            if segment.seg_type != PT_LOAD {
+                continue;
+            }
+
+            let virt_offset = (segment.virt_addr - self.base_address) as usize;
+
+            let pad = virt_offset.checked_sub(mapped.len()).unwrap();
+            mapped.extend(vec![0u8; pad]);
+
+            let size  = std::cmp::min(segment.file_size, segment.virt_size as usize);
+            let start = segment.file_offset;
+            let end   = start + size;
+            mapped.extend_from_slice(&buffer[start..end]);
+
+            let pad = segment.virt_size as usize - size;
+            mapped.extend(vec![0u8; pad]);
+        }
+
+        let pad = ((mapped.len() + 4095) & !4095) - mapped.len();
+        mapped.extend(vec![0u8; pad]);
+
+        mapped
     }
 }
 
