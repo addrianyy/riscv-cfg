@@ -1,10 +1,10 @@
-mod decoder;
+mod rv64;
 mod elf_loader;
 
 use std::collections::BTreeMap;
 use std::convert::TryInto;
 
-use decoder::{AddressedInstruction, Instruction, Register};
+use rv64::{AddressedInstruction, Instruction, Register};
 
 fn save_dot_svg_graph(graph_desc: &str, output_path: &str) {
     use std::process::{Command, Stdio};
@@ -116,7 +116,7 @@ impl Executable {
         let instruction = u32::from_le_bytes(self.mapped[offset..offset + 4]
             .try_into().unwrap());
 
-        decoder::decode_instruction(instruction)
+        rv64::decode_instruction(instruction)
     }
 
     fn get_function_cfg(&self, start: u64, size: u64) -> CFG {

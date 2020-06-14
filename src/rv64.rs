@@ -121,7 +121,7 @@ impl fmt::Display for Register {
 pub enum Instruction {
     Undefined,
 
-    Lui   { imm: i64, rd: Register },
+    Lui { imm: i64, rd: Register },
 
     Auipc { imm: i64, rd: Register },
     Jal   { imm: i64, rd: Register },
@@ -181,77 +181,21 @@ pub enum Instruction {
     Ebreak,
     Ecall,
 
-    Fence {
-        imm: i64,
-        rs1: Register,
-        rd: Register,
-    },
+    Fence { imm: i64, rs1: Register, rd: Register },
 
-    Mul {
-        rs1: Register,
-        rs2: Register,
-        rd: Register,
-    },
-    Mulh {
-        rs1: Register,
-        rs2: Register,
-        rd: Register,
-    },
-    Mulhsu {
-        rs1: Register,
-        rs2: Register,
-        rd: Register,
-    },
-    Mulhu {
-        rs1: Register,
-        rs2: Register,
-        rd: Register,
-    },
-    Div {
-        rs1: Register,
-        rs2: Register,
-        rd: Register,
-    },
-    Divu {
-        rs1: Register,
-        rs2: Register,
-        rd: Register,
-    },
-    Rem {
-        rs1: Register,
-        rs2: Register,
-        rd: Register,
-    },
-    Remu {
-        rs1: Register,
-        rs2: Register,
-        rd: Register,
-    },
-    Mulw {
-        rs1: Register,
-        rs2: Register,
-        rd: Register,
-    },
-    Divw {
-        rs1: Register,
-        rs2: Register,
-        rd: Register,
-    },
-    Divuw {
-        rs1: Register,
-        rs2: Register,
-        rd: Register,
-    },
-    Remw {
-        rs1: Register,
-        rs2: Register,
-        rd: Register,
-    },
-    Remuw {
-        rs1: Register,
-        rs2: Register,
-        rd: Register,
-    },
+    Mul    { rs1: Register, rs2: Register, rd: Register },
+    Mulh   { rs1: Register, rs2: Register, rd: Register },
+    Mulhsu { rs1: Register, rs2: Register, rd: Register },
+    Mulhu  { rs1: Register, rs2: Register, rd: Register },
+    Div    { rs1: Register, rs2: Register, rd: Register },
+    Divu   { rs1: Register, rs2: Register, rd: Register },
+    Rem    { rs1: Register, rs2: Register, rd: Register },
+    Remu   { rs1: Register, rs2: Register, rd: Register },
+    Mulw   { rs1: Register, rs2: Register, rd: Register },
+    Divw   { rs1: Register, rs2: Register, rd: Register },
+    Divuw  { rs1: Register, rs2: Register, rd: Register },
+    Remw   { rs1: Register, rs2: Register, rd: Register },
+    Remuw  { rs1: Register, rs2: Register, rd: Register },
 }
 
 fn sign32(value: u32) -> u32 {
@@ -259,7 +203,7 @@ fn sign32(value: u32) -> u32 {
 }
 
 fn decode_rtype(instr: u32, opcode: u32) -> Instruction {
-    let rd = Register::from_number((instr >> 7) & 0b11111).unwrap();
+    let rd  = Register::from_number((instr >>  7) & 0b11111).unwrap();
     let rs1 = Register::from_number((instr >> 15) & 0b11111).unwrap();
     let rs2 = Register::from_number((instr >> 20) & 0b11111).unwrap();
 
@@ -268,36 +212,36 @@ fn decode_rtype(instr: u32, opcode: u32) -> Instruction {
 
     match opcode {
         0b011_0011 if funct7 == 0b000_0001 => match funct3 {
-            0b000 => Instruction::Mul { rs1, rs2, rd },
-            0b001 => Instruction::Mulh { rs1, rs2, rd },
+            0b000 => Instruction::Mul    { rs1, rs2, rd },
+            0b001 => Instruction::Mulh   { rs1, rs2, rd },
             0b010 => Instruction::Mulhsu { rs1, rs2, rd },
-            0b011 => Instruction::Mulhu { rs1, rs2, rd },
-            0b100 => Instruction::Div { rs1, rs2, rd },
-            0b101 => Instruction::Divu { rs1, rs2, rd },
-            0b110 => Instruction::Rem { rs1, rs2, rd },
-            0b111 => Instruction::Remu { rs1, rs2, rd },
-            _ => Instruction::Undefined,
+            0b011 => Instruction::Mulhu  { rs1, rs2, rd },
+            0b100 => Instruction::Div    { rs1, rs2, rd },
+            0b101 => Instruction::Divu   { rs1, rs2, rd },
+            0b110 => Instruction::Rem    { rs1, rs2, rd },
+            0b111 => Instruction::Remu   { rs1, rs2, rd },
+            _     => Instruction::Undefined,
         },
         0b011_0011 => match (funct7, funct3) {
-            (0b000_0000, 0b000) => Instruction::Add { rs1, rs2, rd },
-            (0b010_0000, 0b000) => Instruction::Sub { rs1, rs2, rd },
-            (0b000_0000, 0b001) => Instruction::Sll { rs1, rs2, rd },
-            (0b000_0000, 0b010) => Instruction::Slt { rs1, rs2, rd },
+            (0b000_0000, 0b000) => Instruction::Add  { rs1, rs2, rd },
+            (0b010_0000, 0b000) => Instruction::Sub  { rs1, rs2, rd },
+            (0b000_0000, 0b001) => Instruction::Sll  { rs1, rs2, rd },
+            (0b000_0000, 0b010) => Instruction::Slt  { rs1, rs2, rd },
             (0b000_0000, 0b011) => Instruction::Sltu { rs1, rs2, rd },
-            (0b000_0000, 0b100) => Instruction::Xor { rs1, rs2, rd },
-            (0b000_0000, 0b101) => Instruction::Srl { rs1, rs2, rd },
-            (0b010_0000, 0b101) => Instruction::Sra { rs1, rs2, rd },
-            (0b000_0000, 0b110) => Instruction::Or { rs1, rs2, rd },
-            (0b000_0000, 0b111) => Instruction::And { rs1, rs2, rd },
-            _ => Instruction::Undefined,
+            (0b000_0000, 0b100) => Instruction::Xor  { rs1, rs2, rd },
+            (0b000_0000, 0b101) => Instruction::Srl  { rs1, rs2, rd },
+            (0b010_0000, 0b101) => Instruction::Sra  { rs1, rs2, rd },
+            (0b000_0000, 0b110) => Instruction::Or   { rs1, rs2, rd },
+            (0b000_0000, 0b111) => Instruction::And  { rs1, rs2, rd },
+            _                   => Instruction::Undefined,
         },
         0b011_1011 if funct7 == 0b000_0001 => match funct3 {
-            0b000 => Instruction::Mulw { rs1, rs2, rd },
-            0b100 => Instruction::Divw { rs1, rs2, rd },
+            0b000 => Instruction::Mulw  { rs1, rs2, rd },
+            0b100 => Instruction::Divw  { rs1, rs2, rd },
             0b101 => Instruction::Divuw { rs1, rs2, rd },
-            0b110 => Instruction::Remw { rs1, rs2, rd },
+            0b110 => Instruction::Remw  { rs1, rs2, rd },
             0b111 => Instruction::Remuw { rs1, rs2, rd },
-            _ => Instruction::Undefined,
+            _     => Instruction::Undefined,
         },
         0b011_1011 => match (funct7, funct3) {
             (0b000_0000, 0b000) => Instruction::Addw { rs1, rs2, rd },
@@ -305,72 +249,59 @@ fn decode_rtype(instr: u32, opcode: u32) -> Instruction {
             (0b000_0000, 0b001) => Instruction::Sllw { rs1, rs2, rd },
             (0b000_0000, 0b101) => Instruction::Srlw { rs1, rs2, rd },
             (0b010_0000, 0b101) => Instruction::Sraw { rs1, rs2, rd },
-            _ => Instruction::Undefined,
+            _                   => Instruction::Undefined,
         },
         _ => Instruction::Undefined,
     }
 }
 
 fn decode_itype(instr: u32, opcode: u32) -> Instruction {
-    let imm0_10 = (instr >> 20) & 0b111_1111_1111;
+    let imm0_10  = (instr >> 20) & 0b111_1111_1111;
     let imm11_31 = sign32(instr);
-    let imm = (imm0_10 | (imm11_31 << 11)) as i32 as i64;
+    let imm      = (imm0_10 | (imm11_31 << 11)) as i32 as i64;
 
-    let rd_raw = (instr >> 7) & 0b11111;
+    let rd_raw  = (instr >>  7) & 0b11111;
     let rs1_raw = (instr >> 15) & 0b11111;
 
-    let rd = Register::from_number(rd_raw).unwrap();
+    let rd  = Register::from_number(rd_raw).unwrap();
     let rs1 = Register::from_number(rs1_raw).unwrap();
 
     let funct3 = (instr >> 12) & 0b111;
 
-    let shamt = (instr >> 20) & 0b11_1111;
-    let shtype = (instr >> 26) & 0b11_1111;
-
-    let shamt32 = (instr >> 20) & 0b1_1111;
+    let shamt    = (instr >> 20) & 0b11_1111;
+    let shtype   = (instr >> 26) & 0b11_1111;
+    let shamt32  = (instr >> 20) & 0b1_1111;
     let shtype32 = (instr >> 25) & 0b11_11111;
 
     match opcode {
         0b001_0011 => match funct3 {
-            0b000 => Instruction::Addi { imm, rs1, rd },
-            0b010 => Instruction::Slti { imm, rs1, rd },
+            0b000 => Instruction::Addi  { imm, rs1, rd },
+            0b010 => Instruction::Slti  { imm, rs1, rd },
             0b011 => Instruction::Sltiu { imm, rs1, rd },
-            0b100 => Instruction::Xori { imm, rs1, rd },
-            0b110 => Instruction::Ori { imm, rs1, rd },
-            0b111 => Instruction::Andi { imm, rs1, rd },
+            0b100 => Instruction::Xori  { imm, rs1, rd },
+            0b110 => Instruction::Ori   { imm, rs1, rd },
+            0b111 => Instruction::Andi  { imm, rs1, rd },
             0b001 if shtype == 0b00_0000 => Instruction::Slli { shamt, rs1, rd },
             0b101 if shtype == 0b00_0000 => Instruction::Srli { shamt, rs1, rd },
             0b101 if shtype == 0b01_0000 => Instruction::Srai { shamt, rs1, rd },
-            _ => Instruction::Undefined,
+            _                            => Instruction::Undefined,
         },
         0b000_0011 => match funct3 {
-            0b000 => Instruction::Lb { imm, rs1, rd },
-            0b001 => Instruction::Lh { imm, rs1, rd },
-            0b010 => Instruction::Lw { imm, rs1, rd },
+            0b000 => Instruction::Lb  { imm, rs1, rd },
+            0b001 => Instruction::Lh  { imm, rs1, rd },
+            0b010 => Instruction::Lw  { imm, rs1, rd },
             0b100 => Instruction::Lbu { imm, rs1, rd },
             0b101 => Instruction::Lhu { imm, rs1, rd },
             0b110 => Instruction::Lwu { imm, rs1, rd },
-            0b011 => Instruction::Ld { imm, rs1, rd },
-            _ => Instruction::Undefined,
+            0b011 => Instruction::Ld  { imm, rs1, rd },
+            _     => Instruction::Undefined,
         },
         0b001_1011 => match funct3 {
             0b000 => Instruction::Addiw { imm, rs1, rd },
-            0b001 if shtype32 == 0b000_0000 => Instruction::Slliw {
-                shamt: shamt32,
-                rs1,
-                rd,
-            },
-            0b101 if shtype32 == 0b000_0000 => Instruction::Srliw {
-                shamt: shamt32,
-                rs1,
-                rd,
-            },
-            0b101 if shtype32 == 0b010_0000 => Instruction::Sraiw {
-                shamt: shamt32,
-                rs1,
-                rd,
-            },
-            _ => Instruction::Undefined,
+            0b001 if shtype32 == 0b000_0000 => Instruction::Slliw { shamt: shamt32, rs1, rd },
+            0b101 if shtype32 == 0b000_0000 => Instruction::Srliw { shamt: shamt32, rs1, rd },
+            0b101 if shtype32 == 0b010_0000 => Instruction::Sraiw { shamt: shamt32, rs1, rd },
+            _                               => Instruction::Undefined,
         },
         0b111_0011 => {
             if funct3 == 0 && rs1_raw == 0 && rd_raw == 0 {
@@ -391,15 +322,15 @@ fn decode_itype(instr: u32, opcode: u32) -> Instruction {
             }
         }
         0b110_0111 if funct3 == 0 => Instruction::Jalr { imm, rs1, rd },
-        _ => Instruction::Undefined,
+        _                         => Instruction::Undefined,
     }
 }
 
 fn decode_stype(instr: u32, opcode: u32) -> Instruction {
-    let imm0_4 = (instr >> 7) & 0b11111;
-    let imm5_10 = (instr >> 25) & 0b11_1111;
+    let imm0_4   = (instr >>  7) & 0b11111;
+    let imm5_10  = (instr >> 25) & 0b11_1111;
     let imm11_31 = sign32(instr);
-    let imm = (imm0_4 | (imm5_10 << 5) | (imm11_31 << 11)) as i32 as i64;
+    let imm      = (imm0_4 | (imm5_10 << 5) | (imm11_31 << 11)) as i32 as i64;
 
     let rs1 = Register::from_number((instr >> 15) & 0b11111).unwrap();
     let rs2 = Register::from_number((instr >> 20) & 0b11111).unwrap();
@@ -412,18 +343,19 @@ fn decode_stype(instr: u32, opcode: u32) -> Instruction {
             0b001 => Instruction::Sh { imm, rs1, rs2 },
             0b010 => Instruction::Sw { imm, rs1, rs2 },
             0b011 => Instruction::Sd { imm, rs1, rs2 },
-            _ => Instruction::Undefined,
+            _     => Instruction::Undefined,
         },
         _ => Instruction::Undefined,
     }
 }
 
 fn decode_btype(instr: u32, opcode: u32) -> Instruction {
-    let imm1_4 = (instr >> 8) & 0b1111;
-    let imm5_10 = (instr >> 25) & 0b11_1111;
-    let imm11 = (instr >> 7) & 0b1;
+    let imm1_4   = (instr >>  8) & 0b1111;
+    let imm5_10  = (instr >> 25) & 0b11_1111;
+    let imm11    = (instr >>  7) & 0b1;
     let imm12_31 = sign32(instr);
-    let imm = ((imm1_4 << 1) | (imm5_10 << 5) | (imm11 << 11) | (imm12_31 << 12)) as i32 as i64;
+    let imm      = ((imm1_4 << 1) | (imm5_10 << 5) | (imm11 << 11) | (imm12_31 << 12))
+                        as i32 as i64;
 
     let rs1 = Register::from_number((instr >> 15) & 0b11111).unwrap();
     let rs2 = Register::from_number((instr >> 20) & 0b11111).unwrap();
@@ -432,13 +364,13 @@ fn decode_btype(instr: u32, opcode: u32) -> Instruction {
 
     match opcode {
         0b110_0011 => match funct3 {
-            0b000 => Instruction::Beq { imm, rs1, rs2 },
-            0b001 => Instruction::Bne { imm, rs1, rs2 },
-            0b100 => Instruction::Blt { imm, rs1, rs2 },
-            0b101 => Instruction::Bge { imm, rs1, rs2 },
+            0b000 => Instruction::Beq  { imm, rs1, rs2 },
+            0b001 => Instruction::Bne  { imm, rs1, rs2 },
+            0b100 => Instruction::Blt  { imm, rs1, rs2 },
+            0b101 => Instruction::Bge  { imm, rs1, rs2 },
             0b110 => Instruction::Bltu { imm, rs1, rs2 },
             0b111 => Instruction::Bgeu { imm, rs1, rs2 },
-            _ => Instruction::Undefined,
+            _     => Instruction::Undefined,
         },
         _ => Instruction::Undefined,
     }
@@ -446,27 +378,28 @@ fn decode_btype(instr: u32, opcode: u32) -> Instruction {
 
 fn decode_utype(instr: u32, opcode: u32) -> Instruction {
     let imm = (instr & 0xFFFF_F000) as i32 as i64;
-    let rd = Register::from_number((instr >> 7) & 0b11111).unwrap();
+    let rd  = Register::from_number((instr >> 7) & 0b11111).unwrap();
 
     match opcode {
-        0b011_0111 => Instruction::Lui { imm, rd },
+        0b011_0111 => Instruction::Lui   { imm, rd },
         0b001_0111 => Instruction::Auipc { imm, rd },
-        _ => Instruction::Undefined,
+        _          => Instruction::Undefined,
     }
 }
 
 fn decode_jtype(instr: u32, opcode: u32) -> Instruction {
-    let imm1_10 = (instr >> 21) & 0b11_1111_1111;
-    let imm11 = (instr >> 20) & 0b1;
+    let imm1_10  = (instr >> 21) & 0b11_1111_1111;
+    let imm11    = (instr >> 20) & 0b1;
     let imm12_19 = (instr >> 12) & 0b1111_1111;
     let imm20_31 = sign32(instr);
-    let imm = ((imm1_10 << 1) | (imm11 << 11) | (imm12_19 << 12) | (imm20_31 << 20)) as i32 as i64;
+    let imm      = ((imm1_10 << 1) | (imm11 << 11) | (imm12_19 << 12) | (imm20_31 << 20))
+                        as i32 as i64;
 
     let rd = Register::from_number((instr >> 7) & 0b11111).unwrap();
 
     match opcode {
         0b110_1111 => Instruction::Jal { imm, rd },
-        _ => Instruction::Undefined,
+        _          => Instruction::Undefined,
     }
 }
 
@@ -485,7 +418,6 @@ pub fn decode_instruction(instr: u32) -> Instruction {
         Instruction::Undefined
     }
 }
-
 
 pub struct AddressedInstruction {
     pub inst: Instruction,
@@ -670,46 +602,84 @@ impl fmt::Display for AddressedInstruction {
 
                 write!(f, "{} {}, {}, {}", instruction_name, rd, rs1, shamt)?;
             }
-            Add  { rs1, rs2, rd } | 
-            Sub  { rs1, rs2, rd } | 
-            Sll  { rs1, rs2, rd } | 
-            Slt  { rs1, rs2, rd } | 
-            Sltu { rs1, rs2, rd } | 
-            Xor  { rs1, rs2, rd } | 
-            Srl  { rs1, rs2, rd } | 
-            Sra  { rs1, rs2, rd } | 
-            Or   { rs1, rs2, rd } | 
-            And  { rs1, rs2, rd } | 
-            Addw { rs1, rs2, rd } | 
-            Subw { rs1, rs2, rd } | 
-            Sllw { rs1, rs2, rd } | 
-            Srlw { rs1, rs2, rd } | 
-            Sraw { rs1, rs2, rd } => {
+            Add    { rs1, rs2, rd } | 
+            Sub    { rs1, rs2, rd } | 
+            Sll    { rs1, rs2, rd } | 
+            Slt    { rs1, rs2, rd } | 
+            Sltu   { rs1, rs2, rd } | 
+            Xor    { rs1, rs2, rd } | 
+            Srl    { rs1, rs2, rd } | 
+            Sra    { rs1, rs2, rd } | 
+            Or     { rs1, rs2, rd } | 
+            And    { rs1, rs2, rd } | 
+            Addw   { rs1, rs2, rd } | 
+            Subw   { rs1, rs2, rd } | 
+            Sllw   { rs1, rs2, rd } | 
+            Srlw   { rs1, rs2, rd } | 
+            Sraw   { rs1, rs2, rd } |
+            Mul    { rs1, rs2, rd } |
+            Mulh   { rs1, rs2, rd } |
+            Mulhsu { rs1, rs2, rd } |
+            Mulhu  { rs1, rs2, rd } |
+            Div    { rs1, rs2, rd } |
+            Divu   { rs1, rs2, rd } |
+            Rem    { rs1, rs2, rd } |
+            Remu   { rs1, rs2, rd } |
+            Mulw   { rs1, rs2, rd } |
+            Divw   { rs1, rs2, rd } |
+            Divuw  { rs1, rs2, rd } |
+            Remw   { rs1, rs2, rd } |
+            Remuw  { rs1, rs2, rd } => {
                 let instruction_name = match self.inst {
-                    Add  { .. } => "add", 
-                    Sub  { .. } => "sub", 
-                    Sll  { .. } => "sll", 
-                    Slt  { .. } => "slt", 
-                    Sltu { .. } => "sltu", 
-                    Xor  { .. } => "xor", 
-                    Srl  { .. } => "srl", 
-                    Sra  { .. } => "sra", 
-                    Or   { .. } => "or", 
-                    And  { .. } => "and", 
-                    Addw { .. } => "addw", 
-                    Subw { .. } => "subw", 
-                    Sllw { .. } => "sllw", 
-                    Srlw { .. } => "srlw", 
-                    Sraw { .. } => "sraw", 
+                    Add    { .. } => "add", 
+                    Sub    { .. } => "sub", 
+                    Sll    { .. } => "sll", 
+                    Slt    { .. } => "slt", 
+                    Sltu   { .. } => "sltu", 
+                    Xor    { .. } => "xor", 
+                    Srl    { .. } => "srl", 
+                    Sra    { .. } => "sra", 
+                    Or     { .. } => "or", 
+                    And    { .. } => "and", 
+                    Addw   { .. } => "addw", 
+                    Subw   { .. } => "subw", 
+                    Sllw   { .. } => "sllw", 
+                    Srlw   { .. } => "srlw", 
+                    Sraw   { .. } => "sraw", 
+                    Mul    { .. } => "mul",
+                    Mulh   { .. } => "mulh",
+                    Mulhsu { .. } => "mulhsu",
+                    Mulhu  { .. } => "mulhu",
+                    Div    { .. } => "div",
+                    Divu   { .. } => "divu",
+                    Rem    { .. } => "rem",
+                    Remu   { .. } => "remu",
+                    Mulw   { .. } => "mulw",
+                    Divw   { .. } => "divw",
+                    Divuw  { .. } => "divuw",
+                    Remw   { .. } => "remw",
+                    Remuw  { .. } => "remuw",
                     _           => unreachable!(),
                 };
 
                 write!(f, "{} {}, {}, {}", instruction_name, rd, rs1, rs2)?;
             }
+            Slti  { imm, rs1, rd } |
+            Sltiu { imm, rs1, rd } => {
+                let instruction_name = match self.inst {
+                    Slti  { .. } => "slti",
+                    Sltiu { .. } => "sltiu",
+                    _            => unreachable!(),
+                };
+
+                write!(f, "{} {}, {}, {}", instruction_name, rd, rs1, imm)?;
+            }
+            Fence { .. } => {
+                write!(f, "mfence")?;
+            }
             Ecall     => write!(f, "ecall")?,
             Ebreak    => write!(f, "ebreak")?,
             Undefined => write!(f, "ud")?,
-            _         => panic!("Unknown instruction {:?}.", self.inst),
         }
 
         Ok(())
