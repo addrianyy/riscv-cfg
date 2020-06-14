@@ -129,8 +129,21 @@ impl CFG {
 
             match blocks.get(&pc) {
                 Some(_) => {
-                    get_block!().end = pc;
-                    current_block = pc;
+                    if current_block != pc {
+                        let current = get_block!();
+
+                        current.end = pc;
+                        
+                        if !current.terminated {
+                            current.succ.push(pc);
+
+                            get_block!(pc).pred.push(current_block);
+
+                            make_edge!(current_block, pc, EdgeType::Uncond);
+                        }
+
+                        current_block = pc;
+                    }
                 },
                 None => assert!(!get_block!().terminated),
             }

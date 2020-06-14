@@ -4,6 +4,8 @@ mod elf_loader;
 mod dot;
 mod htmlfmt;
 mod cfg;
+mod elf64;
+mod funclist;
 
 use std::convert::TryInto;
 
@@ -11,10 +13,12 @@ use rv64::Instruction;
 use displayinst::DisplayInstruction;
 use htmlfmt::HTMLFormatter;
 use cfg::{CFG, EdgeType};
+use funclist::FunctionList;
 
 struct Executable {
     base:   u64,
     mapped: Vec<u8>,
+    funcs:  FunctionList,
 }
 
 impl Executable {
@@ -35,6 +39,7 @@ impl Executable {
             reg_color:    String::from("#00796b"),
             addr_color:   String::from("#ff8a80"),
             imm_color:    String::from("#e91e63"),
+            funcs:        &self.funcs,
         };
 
         let mut dotgraph = String::new();
@@ -52,8 +57,8 @@ impl Executable {
         }
 
         for (_, block) in cfg.blocks.iter() {
-            dotgraph.push_str(&format!("{} [style=filled fillcolor=gray90", block.start));
-            dotgraph.push_str(&format!(r#"margin=0.15 shape=box fontname="Consolas" label=<"#));
+            dotgraph.push_str(&format!("{} [style=filled fillcolor=gray90 ", block.start));
+            dotgraph.push_str(r#"margin=0.15 shape=box fontname="Consolas" label=<"#);
 
             for pc in (block.start..block.end).step_by(4) {
                 let display_inst = DisplayInstruction::new(
@@ -73,10 +78,24 @@ impl Executable {
 }
 
 fn main() {
-    let file = std::fs::read("F://rv64/main").unwrap();
+    let file = std::fs::read("F://rv64/main")
+        .expect("Failed to open ELF executable.");
+
+    let elf = elf64::Elf::parse(&file);
+    let funcs = funclist::load_from_debug_info(&file, &elf)
+        .expect("Failed to load functions from debug info.");
+
+    let entry_func = funcs.iter().find(|f| f.start == elf.entrypoint)
+        .expect("Failed to find entrypoint in function list.")
+        .clone();
+
     let (base, entrypoint, mapped) = elf_loader::map_elf64(&file);
 
-    let executable = Executable { base, mapped };
+    let executable = Executable { 
+        base,
+        mapped,
+        funcs,
+    };
 
-    executable.draw_function_cfg(entrypoint, 0xB4, "cfg.svg");
+    executable.draw_function_cfg(entry_func.start, entry_func.size, "cfg.svg");
 }
