@@ -8,11 +8,12 @@ mod funclist;
 
 use std::convert::TryInto;
 
-use rv64::Instruction;
+use rv64::{Instruction, Register};
 use displayinst::DisplayInstruction;
 use htmlfmt::HTMLFormatter;
 use cfg::{CFG, EdgeType};
 use funclist::FunctionList;
+use displayinst::InstructionFormatter;
 
 struct Executable {
     base:   u64,
@@ -29,7 +30,7 @@ impl Executable {
         rv64::decode_instruction(instruction)
     }
 
-    fn draw_function_cfg(&self, start: u64, size: u64, output_path: &str) {
+    fn draw_function_cfg(&self, func_name: &str, start: u64, size: u64, output_path: &str) {
         let cfg = CFG::create_from_function(start, size, |address| self.get_instruction(address));
 
         let formatter = HTMLFormatter {
@@ -43,7 +44,7 @@ impl Executable {
 
         let mut dotgraph = String::new();
 
-        dotgraph.push_str("digraph CFG {\n");
+        dotgraph.push_str(&format!("digraph CFG{} {{\n", func_name));
 
         for ((from, to), edge_type) in cfg.edges.iter() {
             let color = match edge_type {
@@ -59,12 +60,51 @@ impl Executable {
             dotgraph.push_str(&format!("{} [style=filled fillcolor=gray90 ", block.start));
             dotgraph.push_str(r#"margin=0.15 shape=box fontname="Consolas" label=<"#);
 
-            for pc in (block.start..block.end).step_by(4) {
-                let display_inst = DisplayInstruction::new(
-                    self.get_instruction(pc), pc, &formatter);
+            if block.entry {
+                dotgraph.push_str(&format!("<b>{}</b><br />", func_name));
+                dotgraph.push_str(r#"<br align="left"/>"#);
+            }
+            
+            let mut previous = None;
 
-                dotgraph.push_str(&format!(r#"0x{:X}&nbsp;&nbsp;{}<br align="left"/>"#,
-                    pc, display_inst));
+            for pc in (block.start..block.end).step_by(4) {
+                let inst = self.get_instruction(pc);
+
+                let mut call_target = None;
+                let mut call_rd     = Register::Zero;
+
+                if let Instruction::Jalr { imm, rs1, rd } = inst {
+                    call_rd = rd;
+
+                    if let Some(Instruction::Auipc { imm: aimm, rd: ard }) = previous {
+                        if rs1 == ard {
+                            call_target = Some((pc - 4).wrapping_add(imm as u64)
+                                .wrapping_add(aimm as u64));
+                        }
+                    }
+                }
+
+                dotgraph.push_str(&format!(r"0x{:X}&nbsp;&nbsp;", pc));
+
+                match call_target {
+                    Some(call_target) => {
+                        if call_rd == Register::Ra {
+                            dotgraph.push_str(&format!("{} {}", formatter.fmt_mnem("call"),
+                                formatter.fmt_addr(call_target)));
+                        } else {
+                            dotgraph.push_str(&format!("{} {}, {}", formatter.fmt_mnem("callu"),
+                                formatter.fmt_reg(call_rd), formatter.fmt_addr(call_target)));
+                        }
+                    }
+                    None => {
+                        let display_inst = DisplayInstruction::new(inst, pc, &formatter);
+                        dotgraph.push_str(&format!(r"{}",display_inst));
+                    }
+                }
+
+                dotgraph.push_str(r#"<br align="left"/>"#);
+
+                previous = Some(inst);
             }
 
             dotgraph.push_str(">];\n");
@@ -84,10 +124,6 @@ fn main() {
     let funcs = funclist::load_from_debug_info(&file, &elf)
         .expect("Failed to load functions from debug info.");
 
-    let entry_func = funcs.iter().find(|f| f.start == elf.entrypoint)
-        .expect("Failed to find entrypoint in function list.")
-        .clone();
-
     let mapped = elf.map(&file);
 
     let executable = Executable { 
@@ -96,5 +132,10 @@ fn main() {
         funcs,
     };
 
-    executable.draw_function_cfg(entry_func.start, entry_func.size, "cfg.svg");
+    for func in &executable.funcs {
+        let name = &func.name;
+        
+        executable.draw_function_cfg(name, func.start, func.size,
+            &format!("cfg/{}.svg", &func.name));
+    }
 }
