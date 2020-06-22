@@ -30,6 +30,27 @@ impl Executable {
         rv64::decode_instruction(instruction)
     }
 
+    fn handle_auipc_pseudo(
+        &self,
+        pc:        u64,
+        a_imm:     i64,
+        a_rd:      Register,
+        inst:      Instruction,
+        formatter: &HTMLFormatter,
+    ) -> Option<String> {
+        match inst {
+            Instruction::Jalr { 
+                rd:  Register::Ra,
+                rs1: Register::Ra,
+                imm,
+            } if a_rd == Register::Ra => {
+                let target = pc.wrapping_add(imm as u64).wrapping_add(a_imm as u64);
+                Some(format!("{} {}", formatter.fmt_mnem("call"), formatter.fmt_addr(target)))
+            }
+            _ => None,
+        }
+    }
+
     fn draw_function_cfg(&self, func_name: &str, start: u64, size: u64, output_path: &str) {
         let cfg = CFG::create_from_function(start, size, |address| self.get_instruction(address));
 
@@ -84,43 +105,28 @@ impl Executable {
                 dotgraph.push_str(r#"<br align="left"/>"#);
             }
             
-            let mut previous: Option<(u64, Instruction)> = None;
+            let mut previous_auipc: Option<(u64, i64, Register)> = None;
 
             for pc in (block.start..block.end).step_by(4) {
                 let inst = self.get_instruction(pc);
                 
-                let mut call_target = None;
+                if let Some((ppc, imm, rd)) = previous_auipc {
+                    previous_auipc = None;
 
-                if let Instruction::Jalr { imm, rs1, rd } = inst {
-                    if let Some((ppc, Instruction::Auipc { imm: aimm, rd: ard })) = previous {
-                        if rs1 == Register::Ra && rd == Register::Ra && ard == Register::Ra {
-                            call_target = Some(ppc.wrapping_add(imm as u64)
-                                .wrapping_add(aimm as u64));
-                        }
+                    let result = self.handle_auipc_pseudo(ppc, imm, rd, inst, &formatter);
+                    if let Some(formatted) = result {
+                        print_pc!(ppc);
+                        dotgraph.push_str(&formatted);
+                        print_newline!();
+
+                        continue;
                     }
+
+                    print_inst!(ppc, Instruction::Auipc { imm, rd });
                 }
 
-                if let Some(call_target) = call_target {
-                    print_pc!(pc - 4);
-
-                    dotgraph.push_str(&format!("{} {}", formatter.fmt_mnem("call"),
-                        formatter.fmt_addr(call_target)));
-
-                    print_newline!();
-
-                    previous = None;
-
-                    continue;
-                }
-
-                if let Some((pc, inst)) = previous {
-                    print_inst!(pc, inst);
-
-                    previous = None;
-                }
-
-                if let Instruction::Auipc { .. } = inst {
-                    previous = Some((pc, inst));
+                if let Instruction::Auipc { imm, rd } = inst {
+                    previous_auipc = Some((pc, imm, rd));
 
                     continue;
                 }
@@ -128,8 +134,8 @@ impl Executable {
                 print_inst!(pc, inst);
             }
 
-            if let Some((pc, inst)) = previous {
-                print_inst!(pc, inst);
+            if let Some((pc, imm, rd)) = previous_auipc {
+                print_inst!(pc, Instruction::Auipc { imm, rd });
             }
 
             dotgraph.push_str(">];\n");
