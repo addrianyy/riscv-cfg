@@ -39,23 +39,38 @@ impl<'a, T: InstructionFormatter> DisplayInstruction<'a, T> {
         self.formatter.fmt_reg(reg)
     }
 
-    fn display_pseudo(&self, f: &mut fmt::Formatter<'_>, handled: &mut bool) -> fmt::Result {
+    fn display_pseudo(&self, f: &mut fmt::Formatter<'_>) -> Result<bool, fmt::Error> {
         use Instruction::*;
 
-        *handled = true;
+        macro_rules! tworeg {
+            ($mnem: expr, $rd: expr, $rs: expr) => {
+                write!(f, "{} {}, {}", self.fmt_mnem($mnem), self.fmt_reg($rd),
+                    self.fmt_reg($rs))?;
+            }
+        }
 
         match self.inst {
             Addi { rd: Register::Zero, rs1: Register::Zero, imm: 0 } => {
                 write!(f, "{}", self.fmt_mnem("nop"))?;
-            },
+            }
             Addi { rd, rs1: Register::Zero, imm } => {
-                write!(f, "{} {}, {}", self.fmt_mnem("mv"), self.fmt_reg(rd),
-                    self.fmt_imm(imm))?;
-            },
+                write!(f, "{} {}, {}", self.fmt_mnem("mv"), self.fmt_reg(rd), self.fmt_imm(imm))?;
+            }
             Addi { rd, rs1, imm: 0 } => {
-                write!(f, "{} {}, {}", self.fmt_mnem("mv"), self.fmt_reg(rd),
-                    self.fmt_reg(rs1))?;
-            },
+                write!(f, "{} {}, {}", self.fmt_mnem("mv"), self.fmt_reg(rd), self.fmt_reg(rs1))?;
+            }
+            Xori { rd, rs1, imm: -1 } => {
+                tworeg!("not", rd, rs1)
+            }
+            Sub { rd, rs1: Register::Zero, rs2 } => {
+                tworeg!("neg", rd, rs2)
+            }
+            Subw { rd, rs1: Register::Zero, rs2 } => {
+                tworeg!("negw", rd, rs2)
+            }
+            Addiw { rd, rs1, imm: 0 } => {
+                tworeg!("sextw", rd, rs1)
+            }
             Jal { rd: Register::Zero, imm } => {
                 write!(f, "{} {}", self.fmt_mnem("j"),
                     self.fmt_addr(self.pc.wrapping_add(imm as u64)))?;
@@ -73,10 +88,10 @@ impl<'a, T: InstructionFormatter> DisplayInstruction<'a, T> {
             Jalr { rd: Register::Zero, rs1, imm: 0 } => {
                 write!(f, "{} {}", self.fmt_mnem("jr"), self.fmt_reg(rs1))?;
             }
-            _ => *handled = false,
+            _ => return Ok(false),
         }
 
-        Ok(())
+        Ok(true)
     }
 }
 
@@ -84,11 +99,8 @@ impl<T: InstructionFormatter> fmt::Display for DisplayInstruction<'_, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use Instruction::*;
 
-        let mut handled = false;
-        self.display_pseudo(f, &mut handled)?;
-
-        if handled {
-            return Ok(());
+        if self.display_pseudo(f)? {
+            return Ok(()); 
         }
 
         match self.inst {
