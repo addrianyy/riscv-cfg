@@ -56,6 +56,25 @@ impl Executable {
             dotgraph.push_str(&format!("{} -> {} [color={}];\n", from, to, color));
         }
 
+        macro_rules! print_pc {
+            ($pc: expr) => { dotgraph.push_str(&format!("0x{:X}&nbsp;&nbsp;", $pc)); }
+        }
+
+        macro_rules! print_newline {
+            () => { dotgraph.push_str(r#"<br align="left"/>"#); }
+        }
+
+        macro_rules! print_inst {
+            ($pc: expr, $inst: expr) => {
+                print_pc!($pc);
+
+                let display_inst = DisplayInstruction::new($inst, $pc, &formatter);
+                dotgraph.push_str(&format!("{}", display_inst));
+
+                print_newline!();
+            }
+        }
+
         for (_, block) in cfg.blocks.iter() {
             dotgraph.push_str(&format!("{} [style=filled fillcolor=gray90 ", block.start));
             dotgraph.push_str(r#"margin=0.15 shape=box fontname="Consolas" label=<"#);
@@ -65,46 +84,52 @@ impl Executable {
                 dotgraph.push_str(r#"<br align="left"/>"#);
             }
             
-            let mut previous = None;
+            let mut previous: Option<(u64, Instruction)> = None;
 
             for pc in (block.start..block.end).step_by(4) {
                 let inst = self.get_instruction(pc);
-
+                
                 let mut call_target = None;
-                let mut call_rd     = Register::Zero;
 
                 if let Instruction::Jalr { imm, rs1, rd } = inst {
-                    call_rd = rd;
-
-                    if let Some(Instruction::Auipc { imm: aimm, rd: ard }) = previous {
-                        if rs1 == ard {
-                            call_target = Some((pc - 4).wrapping_add(imm as u64)
+                    if let Some((ppc, Instruction::Auipc { imm: aimm, rd: ard })) = previous {
+                        if rs1 == Register::Ra && rd == Register::Ra && ard == Register::Ra {
+                            call_target = Some(ppc.wrapping_add(imm as u64)
                                 .wrapping_add(aimm as u64));
                         }
                     }
                 }
 
-                dotgraph.push_str(&format!(r"0x{:X}&nbsp;&nbsp;", pc));
+                if let Some(call_target) = call_target {
+                    print_pc!(pc - 4);
 
-                match call_target {
-                    Some(call_target) => {
-                        if call_rd == Register::Ra {
-                            dotgraph.push_str(&format!("{} {}", formatter.fmt_mnem("call"),
-                                formatter.fmt_addr(call_target)));
-                        } else {
-                            dotgraph.push_str(&format!("{} {}, {}", formatter.fmt_mnem("callu"),
-                                formatter.fmt_reg(call_rd), formatter.fmt_addr(call_target)));
-                        }
-                    }
-                    None => {
-                        let display_inst = DisplayInstruction::new(inst, pc, &formatter);
-                        dotgraph.push_str(&format!(r"{}",display_inst));
-                    }
+                    dotgraph.push_str(&format!("{} {}", formatter.fmt_mnem("call"),
+                        formatter.fmt_addr(call_target)));
+
+                    print_newline!();
+
+                    previous = None;
+
+                    continue;
                 }
 
-                dotgraph.push_str(r#"<br align="left"/>"#);
+                if let Some((pc, inst)) = previous {
+                    print_inst!(pc, inst);
 
-                previous = Some(inst);
+                    previous = None;
+                }
+
+                if let Instruction::Auipc { .. } = inst {
+                    previous = Some((pc, inst));
+
+                    continue;
+                }
+
+                print_inst!(pc, inst);
+            }
+
+            if let Some((pc, inst)) = previous {
+                print_inst!(pc, inst);
             }
 
             dotgraph.push_str(">];\n");
