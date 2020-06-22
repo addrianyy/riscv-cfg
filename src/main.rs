@@ -39,13 +39,17 @@ impl Executable {
         formatter: &HTMLFormatter,
     ) -> Option<String> {
         match inst {
-            Instruction::Jalr { 
-                rd:  Register::Ra,
-                rs1: Register::Ra,
-                imm,
-            } if a_rd == Register::Ra => {
-                let target = pc.wrapping_add(imm as u64).wrapping_add(a_imm as u64);
-                Some(format!("{} {}", formatter.fmt_mnem("call"), formatter.fmt_addr(target)))
+            Instruction::Jalr { rd, rs1, imm } if a_rd == rs1 => {
+                let mnem = match (rs1, rd) {
+                    (Register::Ra, Register::Ra)   => Some("call"),
+                    (Register::T1, Register::Zero) => Some("tail"),
+                    _                              => None,
+                };
+
+                mnem.map(|m| {
+                    let target = pc.wrapping_add(imm as u64).wrapping_add(a_imm as u64);
+                    format!("{} {}", formatter.fmt_mnem(m), formatter.fmt_addr(target))
+                })
             }
             _ => None,
         }
